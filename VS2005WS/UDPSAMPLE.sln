@@ -1,0 +1,20 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 9.00
+# Visual Studio 2005
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "UDPSAMPLE", "UDPSAMPLE.vcproj", "{1BA1039F-4A01-47EC-85C6-1EB7861B95ED}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		GrabCompressAndSend|Win32 = GrabCompressAndSend|Win32
+		ReceiveDecompressAndPlay|Win32 = ReceiveDecompressAndPlay|Win32
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{1BA1039F-4A01-47EC-85C6-1EB7861B95ED}.GrabCompressAndSend|Win32.ActiveCfg = GrabCompressAndSend|Win32
+		{1BA1039F-4A01-47EC-85C6-1EB7861B95ED}.GrabCompressAndSend|Win32.Build.0 = GrabCompressAndSend|Win32
+		{1BA1039F-4A01-47EC-85C6-1EB7861B95ED}.ReceiveDecompressAndPlay|Win32.ActiveCfg = ReceiveDecompressAndPlay|Win32
+		{1BA1039F-4A01-47EC-85C6-1EB7861B95ED}.ReceiveDecompressAndPlay|Win32.Build.0 = ReceiveDecompressAndPlay|Win32
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal

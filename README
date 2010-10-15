@@ -1,0 +1,103 @@
+UDPSample  
+===============
+
+This sample illustrates using vp8 for a live video transmission over lossy 
+UDP with a back channel.
+
+It includes two sample console based subprograms: 
+
+
+GrabCompressAndSend 
+upon receipt of session initiation requests from ReceiveDecompressAndPlay, 
+captures live video from an installed direct show camera, compresses it, 
+packetizes it, adds forward error correction (if specified) and then sends 
+the data across a port using UDP. Upon any receipt of a request for recovery 
+or for a packet resend it responds appropriately. 
+
+ReceiveDecompressAndPlay 
+initiates a session with GrabCompressAndSend sending parameters regarding 
+forward error correction, simulated packetloss, datarate, frame size, etc.  
+The program then awaits arrival of packets from GrabCompressAndSend and uses 
+them to reassemble frames, which it then decompress and plays for the user.  
+Any lost packets that can be rebuilt using forward error correction are 
+rebuilt.   If a packet is lost and can't be rebuilt, packet resend requests 
+are sent.  If there is still not a timely response or a large number of 
+packets are lost the program requests a recovery frame. 
+
+Build requirements : 
+
+Linux -> 64-bit, libsdl and libvpx must be installed and in your paths. 
+MacOSX -> libsdk, libvpx and libvidcap must be installed and in your paths.
+Windows -> VS2005, PlatformSDK ( + DirectShow Baseclasses ) in include and lib 
+  path, DirectX in include and libpath  
+
+DISCLAIMER: This sample code has only been tested on a very limited set of 
+machines - we can use your help to expand and make it work on a wider range 
+of platforms.   
+
+
+
+============================================================
+Usage:  Open up two command prompt windows.  in one run : 
+
+grabcompressandsend
+
+in the other run 
+
+receivedecompressandplay 
+
+Two video windows should open and video should be played.  
+
+
+On 2 separate computers the following command lines requests 400 kbps 
+960x720 video compressed at 15fps, to be sent with 1 xor-packet created from 
+every 5 packets over ports 1407 and 1408. Recovery frames are requested if a 
+lost packet ages to 800 ms.  
+
+receivedecompressandplay -w 960 -h 720 -f 15 -b 400 -n 6 -d 5 -t 800 -s 1408 -r 1407
+
+grabcompressandsend -i 10.10.28.1 -s 1407 -r 1408
+
+============================================================
+
+ReceiveDecompressAndPlay has the following other options: 
+
+-w [640]  request capture width
+-h [480]  request capture height
+-f [30]   request capture frame rate
+-b [300]  videoBitrate = ato
+-n [6]    fecNumerator ( redundancy numerator)
+-d [5]    fecDenominator ( redundancy denominator)
+          6/5 means 1 xor packet for every 5 packets,
+          4/1 means 3 duplicate packets for every packet
+-t [800]  milliseconds before giving up and requesting recovery
+-i [50]   time in milliseconds between attempts at a packet resend
+-c [12]   number of lost packets before requesting recovery
+-l [0]    packets to lose out of every 1000
+-s [1408] port to send requests to
+-r [1407] port to receive requests on.
+
+
+GrabCompressAndSend has the following options: 
+
+-i [127.0.0.1]    Port to send data to.
+-s [1408] port to send requests to
+-r [1407] port to receive requests on.
+
+
+
+Caveats:   This is just sample code. There are many problems that this 
+code does not make any attempt at all to resolve.   Ie. Getting through 
+firewalls, sensible session initiation  (IE SIP),  responding to datarate 
+or packetloss fluctuation, keeping audio and video and synch.   Nor does it 
+resolve issues like long term dropouts or other common problems in any 
+ensible way.   The handling of packets and skipped packets is rudimentary 
+with extra copies, and a very rudimentary way of handling skips.   The program 
+requires directx7 or better with yv12 offscreen surfaces for decode, and a web 
+camera / capture device capable of supplying i420.  Basic RTP is used but RTCP 
+isn't.
+
+
+
+
+
