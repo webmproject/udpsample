@@ -24,24 +24,24 @@ C_DEPS := \
 UNAME := $(shell uname)
 
 ifeq ($(UNAME), Linux)
-	C_FLAGS := -DLINUX  -O0 -g3 -Wall -c -fmessage-length=0 -m64 -MMD -MP -MF"$(@:%.o=%.d)" -MT"$(@:%.o=%.d)"
+    C_FLAGS = -DLINUX  -O0 -g3 -Wall -c -fmessage-length=0 -m64 -MMD -MP -MF"$(@:%.o=%.d)" -MT"$(@:%.o=%.d)"
     RLIBS := -lvpx -lpthread -lrt -lSDL 
     SLIBS := -lvpx -lpthread -lrt 
     L_FLAGS := -m64  
 else
 ifeq ($(UNAME), Darwin)
-    C_FLAGS := -DLINUX -DMACOSX  -O0 -g3 -Wall -c -fmessage-length=0 -MMD -MP -MF"$(@:%.o=%.d)" -MT"$(@:%.o=%.d)"
+    C_FLAGS = -DLINUX -DMACOSX  -O0 -g3 -Wall -c -fmessage-length=0 -MMD -MP -MF"$(@:%.o=%.d)" -MT"$(@:%.o=%.d)"
     RLIBS := -lvpx -lpthread -lSDL -lpthread -lSDLmain -framework cocoa
     SLIBS := -framework Carbon -framework QuartzCore -framework QuickTime -lvpx -lpthread -framework cocoa -lvidcap
     L_FLAGS := -D_THREAD_SAFE
 else
-ifeq ($(UNAME), CYGWIN_NT-6.1)
-	C_FLAGS := -DLINUX -DMACOSX -O0 -g3 -Wall -c -fmessage-length=0 -MMD -MP -MF"$(@:%.o=%.d)" -MT"$(@:%.o=%.d)"
+ifneq ($(findstring CYGWIN, $(UNAME)),)
+    C_FLAGS = -DLINUX -DMACOSX -O0 -g3 -Wall -c -fmessage-length=0 -MMD -MP -MF"$(@:%.o=%.d)" -MT"$(@:%.o=%.d)"
     RLIBS := -lvpx -lpthread -lrt -lSDL 
     SLIBS := -lvpx -lpthread -lrt -lvidcap
     L_FLAGS := 
 else
-	$(error Unknown System need to fix this make file!)
+    $(error Unknown System need to fix this make file!)
 endif
 endif
 endif
