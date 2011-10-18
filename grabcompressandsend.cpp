@@ -832,8 +832,7 @@ int main(int argc, char *argv[])
     cfg.kf_max_dist = 999999;
     cfg.g_threads = 1;
 
-
-    int cpu_used = 8;
+    int cpu_used = -6;
     int static_threshold = 1200;
 
     while (--argc > 0)
@@ -992,6 +991,9 @@ int main(int argc, char *argv[])
     vpx_img_alloc(&raw, IMG_FMT_YV12, display_width, display_height, 1);
 
     cfg.rc_target_bitrate = video_bitrate;
+
+    cfg.g_w = display_width;
+    cfg.g_h = display_height;
 
     vpx_codec_enc_init(&encoder, &vpx_codec_vp8_cx_algo, &cfg, 0);
     vpx_codec_control_(&encoder, VP8E_SET_CPUUSED, cpu_used);
