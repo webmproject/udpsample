@@ -39,6 +39,7 @@ typedef struct
     unsigned int given_up;
 } SKIPS;
 
+#define SSRC 411
 #define SS 256
 #define SSM (SS-1)
 #define PS 2048
@@ -257,7 +258,7 @@ void destroy_surface(void)
 {
 }
 #else
-#define Sleep usleep
+#define Sleep(X) usleep(1000*X)
 extern "C" int _kbhit(void);
 #include <SDL/SDL.h>
 #include <SDL/SDL_thread.h>
@@ -462,7 +463,7 @@ int create_depacketizer(DEPACKETIZER *x)
     x->add_ptr = 0;
     x->last_frame_timestamp = 0xffffffff;
     x->last_seq = 0xffff;
-    x->ssrc = 411;
+    x->ssrc = SSRC;
 
     // skip store is initialized to no skips in store
     for (sn = 0; sn < SS; sn++)
@@ -576,6 +577,9 @@ int read_packet(DEPACKETIZER *p, tc8 *data, unsigned int size)
 {
     PACKET *x = (PACKET *) data;
     unsigned int skip_fill = 0;
+    x->seq = R2(x->seq);
+    x->timestamp = R4(x->timestamp);
+    vpxlog_dbg(LOG_PACKET, "Received Packet %d, %d : new: %d, frame type: %d given_up: %d oldest: %d \n", x->seq, p->p[x->seq&PSM].timestamp, x->new_frame, x->frame_type, given_up, p->oldest_seq);
 
     // random drops
     if ((rand() & 1023) < drop_simulation)
@@ -1026,7 +1030,7 @@ int age_skip_store(DEPACKETIZER *p, struct vpxsocket *vpx_sock, union vpx_sockad
                 buffer[1] = seq & 0x00ff;
                 buffer[2] = (seq & 0xff00) >> 8;
                 vpx_net_sendto(vpx_sock, buffer, 3, &bytes_sent, *address);
-                vpxlog_dbg(DISCARD, "Lost %d, skip: %d, Requesting Resend\n", seq, i);
+                vpxlog_dbg(DISCARD, "Lost %d, skip: %d, Requesting Resend %d,%d \n", seq, i, p->s[i].age , (p->s[i].retry * retry_interval));
                 p->s[i].retry++;
             }
         }
@@ -1040,6 +1044,7 @@ int age_skip_store(DEPACKETIZER *p, struct vpxsocket *vpx_sock, union vpx_sockad
 
     return 0;
 }
+#define SHOW_WINDOW 1
 //#define DEBUG_FILES 1
 #ifdef DEBUG_FILES
 void debug_frame(vpx_image_t *img)
@@ -1245,10 +1250,10 @@ int main(int argc, char *argv[])
             }
         }
 
-        Sleep(200);
     }
-
+#ifdef SHOW_WINDOW
     setup_surface();
+#endif
 
     /* Message loop for display window's thread */
     while (!_kbhit() && signalquit)
@@ -1299,7 +1304,9 @@ int main(int argc, char *argv[])
                 }
 
                 img = vpx_codec_get_frame(&decoder, &iter);
+#ifdef SHOW_WINDOW
                 show_frame(img);
+#endif
 #ifdef DEBUG_FILES
                 debug_frame(img);
 #endif

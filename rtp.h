@@ -9,7 +9,7 @@
  */
 
 #define LARGESTFRAMESIZE 1000000
-#define PACKET_SIZE 1400
+#define PACKET_SIZE 1370
 
 enum
 {
@@ -34,8 +34,9 @@ enum
 };
 
 
-#define LOG_MASK  ( ERRORS | SKIP|REBUILD|DISCARD ) // ( ERRORS|LOG_PACKET|FRAME|SKIP|REBUILD|DISCARD ) //
-
+#define LOG_MASK  ( ERRORS|SKIP|REBUILD|DISCARD ) // ( ERRORS|LOG_PACKET|FRAME|SKIP|REBUILD|DISCARD ) //
+#define R2(X) ( (((X)&0xff)<<8) | ((X)>>8) )
+#define R4(X) ( ((X&0xff)<< 24) | ((X&0xff00) << 8) |((X&0xff0000) >> 8) | (X>>24) )
 typedef struct
 {
     int version : 2;
