@@ -32,10 +32,12 @@ extern "C"
 #include "vpx/vp8cx.h"
 }
 
-unsigned int drop_first = 60;
+unsigned int drop_first = 10;
 unsigned int count_captured_frames = 0;
 
 const int size_buffer = 1680;
+
+#define SSRC 411
 #define FAIL_ON_NONZERO(x) if((x)) { vpxlog_dbg(ERRORS,#x"\n");return -1; };
 #define FAIL_ON_ZERO(x) if(!(x)) { vpxlog_dbg(ERRORS,#x"\n");return -1; };
 #define FAIL_ON_NEGATIVE(x) if((x)<0) { vpxlog_dbg(ERRORS,#x"\n");return -1; };
@@ -66,7 +68,7 @@ CComPtr<IAMStreamConfig> config;
 CComQIPtr<IMediaControl, &IID_IMediaControl> control;
 CComPtr<IVideoWindow> video_window;
 #else
-#define Sleep usleep
+#define Sleep(X) usleep(1000*X)
 extern "C" int _kbhit(void);
 #endif
 
@@ -87,7 +89,7 @@ unsigned short recv_port = 1408;
 #define PS 2048
 #define PSM  (PS-1)
 #define MAX_NUMERATOR 16
-
+#define MAX_PACKETS_PER_FRAME 40
 typedef enum
 {
     NONE,
@@ -241,10 +243,12 @@ int start_capture(void)
     vpxlog_dbg(FRAME, "Creating filters...\n");
     HRE(graph.CoCreateInstance(CLSID_FilterGraph));
     HRE(FindFilter(CLSID_VideoInputDeviceCategory, &capture, false, CComVariant(L"")));
-    HRE(CoCreateInstance(CLSID_SampleGrabber, 0, CLSCTX_INPROC_SERVER, IID_IBaseFilter, reinterpret_cast<void **>(&grabber)));
+    HRE(CoCreateInstance(CLSID_SampleGrabber, 0, CLSCTX_INPROC_SERVER,
+                         IID_IBaseFilter, reinterpret_cast<void **>(&grabber)));
     HRE(grabber->QueryInterface(IID_ISampleGrabber, (void **)&sample_grabber));
     sample_grabber->SetBufferSamples(true);
-    HRE(CoCreateInstance(CLSID_VideoRenderer, 0, CLSCTX_INPROC_SERVER, IID_IBaseFilter, reinterpret_cast<void **>(&video_filter)));
+    HRE(CoCreateInstance(CLSID_VideoRenderer, 0, CLSCTX_INPROC_SERVER,
+                         IID_IBaseFilter, reinterpret_cast<void **>(&video_filter)));
     HRE(graph->AddFilter(capture, L"Capture"));
     HRE(graph->AddFilter(grabber, L"SampleGrabber"));
     HRE(graph->AddFilter(video_filter, L"Video Renderer"));
@@ -273,7 +277,8 @@ int start_capture(void)
     pVih->bmiHeader.biHeight = display_height;
     pVih->bmiHeader.biBitCount = 12;
     pVih->bmiHeader.biPlanes = 3;
-    pVih->bmiHeader.biSizeImage = pVih->bmiHeader.biWidth * pVih->bmiHeader.biHeight * pVih->bmiHeader.biBitCount / 8;
+    pVih->bmiHeader.biSizeImage = pVih->bmiHeader.biWidth * pVih->bmiHeader.biHeight *
+        pVih->bmiHeader.biBitCount / 8;
     pVih->AvgTimePerFrame = 10000000 / capture_frame_rate;
     pVih->rcSource.top = 0;
     pVih->rcSource.left = 0;
@@ -661,9 +666,12 @@ int make_redundant_packet
         return 0;
     }
 
-    p->packet[p->add_ptr].timestamp = time;
-    p->packet[p->add_ptr].seq = p->seq;
-    p->packet[p->add_ptr].size = max_size;
+    p->packet[p->add_ptr].ssrc = SSRC;
+    p->packet[p->add_ptr].csrccount = 1;
+    p->packet[p->add_ptr].csrc = SSRC;
+    p->packet[p->add_ptr].pad = 0;
+    p->packet[p->add_ptr].timestamp = R4(time);
+    p->packet[p->add_ptr].seq = R2(p->seq);
     p->packet[p->add_ptr].type = XORPACKET;
     p->packet[p->add_ptr].redundant_count = p->fec_denominator;
     p->packet[p->add_ptr].new_frame = 0;
@@ -696,6 +704,7 @@ int make_redundant_packet
         in[0]++;
         out++;
     }
+    p->packet[p->add_ptr].size = max_size;
 
     p->seq ++;
 
@@ -729,8 +738,12 @@ int packetize
     while (size > 0)
     {
         unsigned int psize = (p->size < size ? p->size : size);
-        p->packet[p->add_ptr].timestamp = time;
-        p->packet[p->add_ptr].seq = p->seq;
+        p->packet[p->add_ptr].ssrc = SSRC;
+        p->packet[p->add_ptr].csrccount = 1;
+        p->packet[p->add_ptr].csrc = SSRC;
+        p->packet[p->add_ptr].pad = 0;
+        p->packet[p->add_ptr].timestamp = R4(time);
+        p->packet[p->add_ptr].seq = R2(p->seq);
         p->packet[p->add_ptr].size = psize;
         p->packet[p->add_ptr].type = DATAPACKET;
 
@@ -773,7 +786,7 @@ int packetize
 
     return 0;
 }
-#define WRITEFILE
+//#define WRITEFILE
 //#define ONEWAY
 int send_packet(PACKETIZER *p, struct vpxsocket *vpxSock, union vpx_sockaddr_x address)
 {
@@ -783,11 +796,18 @@ int send_packet(PACKETIZER *p, struct vpxsocket *vpxSock, union vpx_sockaddr_x a
     if (p->send_ptr == p->add_ptr)
         return -1;
 
-    p->packet[p->send_ptr].ssrc = 411;
-    vpxlog_dbg(LOG_PACKET, "Sent Packet %d, %d, %d : new=%d \n", p->packet[p->send_ptr].seq, p->packet[p->send_ptr].timestamp, p->packet[p->send_ptr].frame_type, p->packet[p->send_ptr].new_frame);
-#ifndef ONEWAY
-    rc = vpx_net_sendto(vpxSock, (tc8 *) &p->packet[p->send_ptr], PACKET_HEADER_SIZE + p->packet[p->send_ptr].size, &bytes_sent, address);
-#endif
+    vpxlog_dbg(LOG_PACKET, "Sent Packet %d, %d, %d : new=%d %d %x\n",
+               R2(p->packet[p->send_ptr].seq),
+               R4(p->packet[p->send_ptr].timestamp),
+               p->packet[p->send_ptr].frame_type,
+               p->packet[p->send_ptr].size,
+               p->packet[p->send_ptr].new_frame,address);
+
+    rc = vpx_net_sendto(vpxSock, (tc8 *) &p->packet[p->send_ptr],
+                        PACKET_HEADER_SIZE + p->packet[p->send_ptr].size,
+                        &bytes_sent,
+                        address);
+
     p->send_ptr ++;
     p->send_ptr &= PSM;
     p->count --;
@@ -830,7 +850,7 @@ int main(int argc, char *argv[])
     cfg.g_error_resilient = 1;
     cfg.kf_mode = VPX_KF_DISABLED;
     cfg.kf_max_dist = 999999;
-    cfg.g_threads = 1;
+    cfg.g_threads = 2;
 
     int cpu_used = -6;
     int static_threshold = 1200;
@@ -953,14 +973,15 @@ int main(int argc, char *argv[])
     int bytes_sent;
 
 #ifndef ONEWAY
+    char init_packet[PACKET_SIZE] = "initiate call";
+    rc = vpx_net_sendto(&vpx_socket, (tc8 *) &init_packet, PACKET_SIZE ,
+                        &bytes_sent, address);
 
     while (!_kbhit())
     {
-        char init_packet[PACKET_SIZE] = "initiate call";
-        rc = vpx_net_sendto(&vpx_socket, (tc8 *) &init_packet, PACKET_SIZE , &bytes_sent, address);
-        Sleep(200);
 
-        rc = vpx_net_recvfrom(&vpx_socket2, one_packet, sizeof(one_packet), &bytes_read, &address2);
+        rc = vpx_net_recvfrom(&vpx_socket2, one_packet, sizeof(one_packet),
+                              &bytes_read, &address2);
 
         if (rc != TC_OK && rc != TC_WOULDBLOCK)
             vpxlog_dbg(LOG_PACKET, "error\n");
@@ -972,19 +993,30 @@ int main(int argc, char *argv[])
         {
             if (strncmp(one_packet, "configuration ", 14) == 0)
             {
-                sscanf(one_packet + 14, "%d %d %d %d %d %d", &display_width, &display_height, &capture_frame_rate, &video_bitrate, &fec_numerator, &fec_denominator);
-                printf("Dimensions: %dx%-d %dfps %dkbps %d/%dFEC\n", display_width, display_height, capture_frame_rate, video_bitrate, fec_numerator, fec_denominator);
+                sscanf(one_packet + 14, "%d %d %d %d %d %d", &display_width,
+                       &display_height, &capture_frame_rate, &video_bitrate,
+                       &fec_numerator, &fec_denominator);
+                printf("Dimensions: %dx%-d %dfps %dkbps %d/%dFEC\n",
+                       display_width, display_height, capture_frame_rate,
+                       video_bitrate, fec_numerator, fec_denominator);
                 break;
             }
         }
+        else
+        {
+            rc = vpx_net_sendto(&vpx_socket, (tc8 *) &init_packet, PACKET_SIZE,
+                                &bytes_sent, address);
+            Sleep(200);
+
+        }
     }
 
-    char init_packet[PACKET_SIZE] = "confirmed";
-    rc = vpx_net_sendto(&vpx_socket, (tc8 *) &init_packet, PACKET_SIZE , &bytes_sent, address);
+    char conf_packet[PACKET_SIZE] = "confirmed";
+    rc = vpx_net_sendto(&vpx_socket, (tc8 *) &conf_packet, PACKET_SIZE , &bytes_sent, address);
     Sleep(200);
-    rc = vpx_net_sendto(&vpx_socket, (tc8 *) &init_packet, PACKET_SIZE , &bytes_sent, address);
+    rc = vpx_net_sendto(&vpx_socket, (tc8 *) &conf_packet, PACKET_SIZE , &bytes_sent, address);
     Sleep(200);
-    rc = vpx_net_sendto(&vpx_socket, (tc8 *) &init_packet, PACKET_SIZE , &bytes_sent, address);
+    rc = vpx_net_sendto(&vpx_socket, (tc8 *) &conf_packet, PACKET_SIZE , &bytes_sent, address);
 #endif
 
     vpx_codec_ctx_t        encoder;
@@ -999,7 +1031,7 @@ int main(int argc, char *argv[])
     vpx_codec_control_(&encoder, VP8E_SET_CPUUSED, cpu_used);
     vpx_codec_control_(&encoder, VP8E_SET_STATIC_THRESHOLD, static_threshold);
     vpx_codec_control_(&encoder, VP8E_SET_ENABLEAUTOALTREF, 0);
-
+    vpx_codec_control_(&encoder, VP8E_SET_NOISE_SENSITIVITY, 2);
     create_packetizer(&x, XOR, fec_numerator, fec_denominator);
     //HRE(CoInitialize(NULL));
 
@@ -1011,7 +1043,8 @@ int main(int argc, char *argv[])
 
         // if there is nothing to send
 #ifndef ONEWAY
-        rc = vpx_net_recvfrom(&vpx_socket2, one_packet, sizeof(one_packet), &bytes_read, &address2);
+        rc = vpx_net_recvfrom(&vpx_socket2, one_packet, sizeof(one_packet),
+                              &bytes_read, &address2);
 
         if (rc != TC_OK && rc != TC_WOULDBLOCK && rc != TC_TIMEDOUT)
             vpxlog_dbg(LOG_PACKET, "error\n");
@@ -1026,6 +1059,11 @@ int main(int argc, char *argv[])
             int bytes_sent;
 
             PACKET *tp = &x.packet[seq&PSM];
+
+            // ignore invalid commands
+            if(command != 'r' && command != 'g')
+              continue;
+
             vpxlog_dbg(SKIP, "Command :%c Seq:%d FT:%c RecoverySeq:%d AltSeq:%d \n",
                         command, seq, (tp->frame_type == NORMAL ? 'N' : 'G'),
                         gold_recovery_seq, altref_recovery_seq);
@@ -1034,8 +1072,12 @@ int main(int argc, char *argv[])
             if (command == 'r' && request_recovery == 0)
             {
                 rc = vpx_net_sendto(&vpx_socket, (tc8 *) &x.packet[seq&PSM],
-                                    PACKET_HEADER_SIZE + x.packet[seq&PSM].size, &bytes_sent, address);
-                vpxlog_dbg(SKIP, "Sent recovery packet %c:%d, %d,%d\n", command, tp->frame_type, seq, tp->timestamp);
+                                    PACKET_HEADER_SIZE + x.packet[seq&PSM].size,
+                                    &bytes_sent, address);
+                vpxlog_dbg(SKIP, "Sent recovery packet %d,%c:%d %d, %d,%d,%d %x\n",\
+                           rc, command, tp->frame_type, seq, R2(tp->seq), R4(tp->timestamp),
+                           bytes_sent,address);
+                continue;
             }
 
             int recovery_seq = gold_recovery_seq;
@@ -1052,33 +1094,46 @@ int main(int argc, char *argv[])
             }
 
             // if requested to recover but seq is before recovery RESEND
-            if ((unsigned short)(seq - recovery_seq) > 32768 || command != 'g')
+            if ((unsigned short)(seq - recovery_seq) > 32768 || command == 'r' )
             {
                 rc = vpx_net_sendto(&vpx_socket, (tc8 *) &x.packet[seq&PSM],
-                                    PACKET_HEADER_SIZE + x.packet[seq&PSM].size, &bytes_sent, address);
-                vpxlog_dbg(SKIP, "Sent recovery packet %c:%d, %d,%d\n", command, tp->frame_type, seq, tp->timestamp);
+                                    PACKET_HEADER_SIZE + x.packet[seq&PSM].size,
+                                    &bytes_sent, address);
+                vpxlog_dbg(SKIP, "Sent recovery packet %c:%d, %d,%d\n", command,
+                           tp->frame_type, seq, R4(tp->timestamp));
                 continue;
             }
 
-            // requested  recovery frame and its a normal frame packet that's lost and seq is after our recovery frame so make a long term ref frame
-            if (tp->frame_type == NORMAL && (unsigned short)(seq - recovery_seq) > 0 && (unsigned short)(seq - recovery_seq) < 32768)
+            // requested  recovery frame and its a normal frame packet that's
+            // lost and seq is after our recovery frame so make a long term ref frame
+            if (tp->frame_type == NORMAL && (unsigned short)(seq - recovery_seq) > 0
+                && (unsigned short)(seq - recovery_seq) < 32768)
             {
                 request_recovery = recovery_type;
-                vpxlog_dbg(SKIP, "Requested recovery frame %c:%c,%d,%d\n", command, (recovery_type == GOLD ? 'G' : 'A'), x.packet[gold_recovery_seq&PSM].frame_type, seq, x.packet[gold_recovery_seq&PSM].timestamp);
+                vpxlog_dbg(SKIP, "Requested recovery frame %c:%c,%d,%d\n", command,
+                           (recovery_type == GOLD ? 'G' : 'A'),
+                           x.packet[gold_recovery_seq&PSM].frame_type, seq,
+                           R4(x.packet[gold_recovery_seq&PSM].timestamp));
                 continue;
             }
 
-            // so the other one is too old request a recovery frame from our older reference buffer.
-            if ((unsigned short)(seq - other_recovery_seq) > 0 && (unsigned short)(seq - other_recovery_seq) < 32768)
+            // so the other one is too old request a recovery frame from an older
+            // reference buffer.
+            if ((unsigned short)(seq - other_recovery_seq) > 0 &&
+                (unsigned short)(seq - other_recovery_seq) < 32768)
             {
                 request_recovery = other_recovery_type;
-                vpxlog_dbg(SKIP, "Requested recovery frame %c:%c,%d,%d\n", command, (other_recovery_type == GOLD ? 'G' : 'A'), x.packet[gold_recovery_seq&PSM].frame_type, seq, x.packet[gold_recovery_seq&PSM].timestamp);
+                vpxlog_dbg(SKIP, "Requested recovery frame %c:%c,%d,%d\n", command,
+                           (other_recovery_type == GOLD ? 'G' : 'A'),
+                           x.packet[gold_recovery_seq&PSM].frame_type, seq,
+                           R4(x.packet[gold_recovery_seq&PSM].timestamp));
                 continue;
             }
 
             // nothing else we can do ask for a key
             request_recovery = KEY;
-            vpxlog_dbg(SKIP, "Requested key frame %c:%d,%d\n", command, tp->frame_type, seq, tp->timestamp);
+            vpxlog_dbg(SKIP, "Requested key frame %c:%d,%d\n", command,
+                       tp->frame_type, seq, R4(tp->timestamp));
 
             continue;
         }
@@ -1091,18 +1146,20 @@ int main(int argc, char *argv[])
         if (get_frame() == 0)
         {
             // do we have room in our packet store for a frame
-            if (x.add_ptr - x.send_ptr < 20)
+            if (x.add_ptr - x.send_ptr < MAX_PACKETS_PER_FRAME)
             {
                 int frame_type;
                 long long time_in_nano_seconds = (long long)(buffer_time * 10000000.000 + .5);
-                unsigned int rtptime = (unsigned int)((long long)(buffer_time * 1000000.000) & 0xffffffff);
+                unsigned int rtptime = (unsigned int)
+                    ((long long)(buffer_time * 1000000.000) & 0xffffffff);
                 double fps = 10000000.000 / (time_in_nano_seconds - last_time_in_nanoseconds);
 
                 //printf("%14.4g\n",fps);
                 const vpx_codec_cx_pkt_t *pkt;
                 vpx_codec_iter_t iter = NULL;
                 flags = recovery_flags[request_recovery];
-                vpx_codec_encode(&encoder, &raw, time_in_nano_seconds, 30000000, flags, VPX_DL_REALTIME);
+                vpx_codec_encode(&encoder, &raw, time_in_nano_seconds, 30000000,
+                                 flags, VPX_DL_REALTIME);
                 ctx_exit_on_error(&encoder, "Failed to encode frame");
 
                 while ((pkt = vpx_codec_get_cx_data(&encoder, &iter)))
@@ -1127,9 +1184,13 @@ int main(int argc, char *argv[])
                         if (frame_type == ALTREF || frame_type == KEY)
                             altref_recovery_seq = x.seq;
 
-                        packetize(&x, rtptime, (unsigned char *) pkt->data.frame.buf, pkt->data.frame.sz, frame_type);
+                        packetize(&x, rtptime, (unsigned char *) pkt->data.frame.buf,
+                                  pkt->data.frame.sz, frame_type);
 
-                        vpxlog_dbg(FRAME, "Frame %d %d %d %10.4g %d\n", x.packet[x.send_ptr].seq, pkt->data.frame.sz, x.packet[x.send_ptr].timestamp, fps, gold_recovery_seq);
+                        vpxlog_dbg(FRAME, "Frame %d %d %d %10.4g %d\n",
+                                   R2(x.packet[x.send_ptr].seq), pkt->data.frame.sz,
+                                   R4(x.packet[x.send_ptr].timestamp), fps,
+                                   gold_recovery_seq);
 #ifdef WRITEFILE
                         fwrite(&pkt->data.frame.sz, 4, 1, out_file);
                         fwrite(pkt->data.frame.buf, pkt->data.frame.sz, 1, out_file);

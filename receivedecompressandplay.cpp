@@ -39,6 +39,7 @@ typedef struct
     unsigned int given_up;
 } SKIPS;
 
+#define SSRC 411
 #define SS 256
 #define SSM (SS-1)
 #define PS 2048
@@ -144,7 +145,8 @@ void display_win_main(void *dummy)
 void setup_surface(void)
 {
     HRESULT hr;
-    thread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE) display_win_main, (LPVOID) NULL, 0, &thread_id);
+    thread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE) display_win_main,
+                          (LPVOID) NULL, 0, &thread_id);
 
     HRE(DirectDrawCreateEx(0, (void **)&direct_draw, IID_IDirectDraw7, 0));
     ZeroMemory(&caps, sizeof(caps));
@@ -186,7 +188,9 @@ int show_frame(vpx_image_t *img)
     DDSURFACEDESC2 ddsd;
     INIT_DXSTRUCT(ddsd);
 
-    HRESULT hr = overlay_surface->Lock(0, &ddsd, DDLOCK_DONOTWAIT | DDLOCK_SURFACEMEMORYPTR | DDLOCK_WRITEONLY, 0);
+    HRESULT hr = overlay_surface->Lock(0, &ddsd, DDLOCK_DONOTWAIT |
+                                       DDLOCK_SURFACEMEMORYPTR |
+                                       DDLOCK_WRITEONLY, 0);
 
     if (SUCCEEDED(hr))
     {
@@ -257,7 +261,7 @@ void destroy_surface(void)
 {
 }
 #else
-#define Sleep usleep
+#define Sleep(X) usleep(1000*X)
 extern "C" int _kbhit(void);
 #include <SDL/SDL.h>
 #include <SDL/SDL_thread.h>
@@ -462,7 +466,7 @@ int create_depacketizer(DEPACKETIZER *x)
     x->add_ptr = 0;
     x->last_frame_timestamp = 0xffffffff;
     x->last_seq = 0xffff;
-    x->ssrc = 411;
+    x->ssrc = SSRC;
 
     // skip store is initialized to no skips in store
     for (sn = 0; sn < SS; sn++)
@@ -543,7 +547,8 @@ void check_recovery(DEPACKETIZER *p,  PACKET *x)
         unsigned short seq = x->seq;//p->oldest_seq;
         unsigned short lastPossibleSeq = p->oldest_seq;//p->last_seq;
         PACKET *tp = &p->p[seq&PSM];
-        vpxlog_dbg(REBUILD, "Received keyframe or recovery frame -> %d, %d \n", seq, p->p[x->seq&PSM].timestamp);
+        vpxlog_dbg(REBUILD, "Received keyframe or recovery frame -> %d, %d \n",
+                   seq, p->p[x->seq&PSM].timestamp);
 
         // if we are on a new frame drop everything older than where we are now.
         if (x->new_frame)
@@ -576,6 +581,11 @@ int read_packet(DEPACKETIZER *p, tc8 *data, unsigned int size)
 {
     PACKET *x = (PACKET *) data;
     unsigned int skip_fill = 0;
+    x->seq = R2(x->seq);
+    x->timestamp = R4(x->timestamp);
+    vpxlog_dbg(LOG_PACKET, "Received Packet %d, %d : new: %d, frame type: "
+        "%d given_up: %d oldest: %d \n", x->seq, p->p[x->seq&PSM].timestamp,
+        x->new_frame, x->frame_type, given_up, p->oldest_seq);
 
     // random drops
     if ((rand() & 1023) < drop_simulation)
@@ -596,13 +606,15 @@ int read_packet(DEPACKETIZER *p, tc8 *data, unsigned int size)
         first_seq_ever = x->seq;
         p->oldest_seq = x->seq;
         p->last_seq = p->oldest_seq - 1;
-        vpxlog_dbg(REBUILD, "Received First TimeStamp ever! -> %d, %d new=%d\n", x->seq, x->timestamp, x->new_frame);
+        vpxlog_dbg(REBUILD, "Received First TimeStamp ever! -> %d, %d new=%d\n",
+                   x->seq, x->timestamp, x->new_frame);
 
         if (x->new_frame != 1)
         {
             add_skip(p, x->seq - 1);
             p->oldest_seq = x->seq - 1;
-            vpxlog_dbg(REBUILD, "First packet not start of new frame! -> %d, \n", x->seq - 1);
+            vpxlog_dbg(REBUILD, "First packet not start of new frame! -> %d, \n",
+                       x->seq - 1);
         }
     }
 
@@ -654,7 +666,10 @@ int read_packet(DEPACKETIZER *p, tc8 *data, unsigned int size)
 
     p->p[x->seq &PSM] = *x;
 
-    vpxlog_dbg(LOG_PACKET, "Received Packet %d, %d : new: %d, frame type: %d given_up: %d oldest: %d \n", x->seq, p->p[x->seq&PSM].timestamp, x->new_frame, x->frame_type, given_up, p->oldest_seq);
+    vpxlog_dbg(LOG_PACKET, "Received Packet %d, %d : new: %d, "
+        "frame type: %d given_up: %d oldest: %d \n", x->seq,
+        p->p[x->seq&PSM].timestamp, x->new_frame, x->frame_type, given_up,
+        p->oldest_seq);
 
     // if we get a key frame or recovery frame set this as new frame
     check_recovery(p, x);
@@ -829,7 +844,8 @@ int frame_ready(DEPACKETIZER *p)
 
     if (timestamp < p->last_frame_timestamp + 1)
     {
-        vpxlog_dbg(FRAME, "Trying to play an old frame:%d, timestamp :%d , last Time :%d \n", seq, timestamp, p->last_frame_timestamp);
+        vpxlog_dbg(FRAME, "Trying to play an old frame:%d, timestamp :%d , "
+            "last Time :%d \n", seq, timestamp, p->last_frame_timestamp);
         return 0;
     }
 
@@ -961,7 +977,8 @@ int age_skip_store(DEPACKETIZER *p, struct vpxsocket *vpx_sock, union vpx_sockad
             buffer[1] = seq & 0x00ff;
             buffer[2] = (seq & 0xff00) >> 8;
             vpx_net_sendto(vpx_sock, buffer, 3, &bytes_sent, *address);
-            vpxlog_dbg(DISCARD, "Give up forever on sequence %d now %d :age :%d retry:%d \n", seq, now, p->s[givenup_skip].age, p->s[givenup_skip].retry);
+            vpxlog_dbg(DISCARD, "Give up forever on sequence %d now %d :age :%d"
+                " retry:%d \n", seq, now, p->s[givenup_skip].age, p->s[givenup_skip].retry);
             p->s[givenup_skip].retry ++;
         }
 
@@ -1014,7 +1031,8 @@ int age_skip_store(DEPACKETIZER *p, struct vpxsocket *vpx_sock, union vpx_sockad
             {
                 given_up = 1;
                 givenup_skip = i;
-                vpxlog_dbg(LOG_PACKET, "Giving up: %d age:%d request_count:%d\n", seq, p->s[i].age, request_count);
+                vpxlog_dbg(LOG_PACKET, "Giving up: %d age:%d request_count:%d\n",
+                           seq, p->s[i].age, request_count);
                 break;
             }
             // request a resend
@@ -1026,7 +1044,8 @@ int age_skip_store(DEPACKETIZER *p, struct vpxsocket *vpx_sock, union vpx_sockad
                 buffer[1] = seq & 0x00ff;
                 buffer[2] = (seq & 0xff00) >> 8;
                 vpx_net_sendto(vpx_sock, buffer, 3, &bytes_sent, *address);
-                vpxlog_dbg(DISCARD, "Lost %d, skip: %d, Requesting Resend\n", seq, i);
+                vpxlog_dbg(DISCARD, "Lost %d, skip: %d, Requesting Resend %d,%d \n",
+                           seq, i, p->s[i].age , (p->s[i].retry * retry_interval));
                 p->s[i].retry++;
             }
         }
@@ -1040,6 +1059,7 @@ int age_skip_store(DEPACKETIZER *p, struct vpxsocket *vpx_sock, union vpx_sockad
 
     return 0;
 }
+#define SHOW_WINDOW 1
 //#define DEBUG_FILES 1
 #ifdef DEBUG_FILES
 void debug_frame(vpx_image_t *img)
@@ -1138,7 +1158,7 @@ int main(int argc, char *argv[])
                     "-n [6]    fec_numerator ( redundancy numerator)\n"
                     "-d [5]    fec_denominator ( redundancy denominator) \n"
                     "          6/5 means 1 xor packet for every 5 packets, \n"
-                    "	       4/1 means 3 duplicate packets for every packet\n"
+                    "	         4/1 means 3 duplicate packets for every packet\n"
                     "-t [800]  milliseconds before giving up and requesting recovery \n"
                     "-i [50]   time in milliseconds between attempts at a packet resend\n"
                     "-c [12]   number of lost packets before requesting recovery \n"
@@ -1185,8 +1205,8 @@ int main(int argc, char *argv[])
     buf = (uint8_t *) malloc(display_width * display_height * 3 / 2);
 
     /* Config post processing settings for decoder */
-    ppcfg.post_proc_flag = VP8_DEMACROBLOCK | VP8_DEBLOCK | VP8_ADDNOISE;
-    ppcfg.deblocking_level = 5	 ;
+    ppcfg.post_proc_flag = VP8_DEMACROBLOCK | VP8_DEBLOCK ;
+    ppcfg.deblocking_level = 4	 ;
     ppcfg.noise_level = 1  ;
     vpx_codec_control(&decoder, VP8_SET_POSTPROC, &ppcfg);
 
@@ -1208,7 +1228,9 @@ int main(int argc, char *argv[])
     while (!_kbhit())
     {
         char initPacket[PACKET_SIZE];
-        sprintf(initPacket, "configuration  %d %d %d %d %d %d ", display_width, display_height, capture_frame_rate, video_bitrate, fec_numerator, fec_denominator);
+        sprintf(initPacket, "configuration  %d %d %d %d %d %d ", display_width,
+                display_height, capture_frame_rate, video_bitrate, fec_numerator,
+                fec_denominator);
         rc = vpx_net_recvfrom(&vpx_sock, one_packet, sizeof(one_packet), &bytes_read, &address);
 
         if (rc != TC_OK && rc != TC_WOULDBLOCK && rc != TC_TIMEDOUT)
@@ -1235,20 +1257,20 @@ int main(int argc, char *argv[])
 
             if (strncmp(one_packet, "initiate call", PACKET_SIZE) == 0)
             {
-                rc = vpx_net_sendto(&vpx_sock2, (tc8 *) &initPacket, PACKET_SIZE , &bytes_sent, address2);
+                rc = vpx_net_sendto(&vpx_sock2, (tc8 *) &initPacket, PACKET_SIZE, &bytes_sent, address2);
             }
 
             if (strncmp(one_packet, "confirmed", PACKET_SIZE) == 0)
             {
-                rc = vpx_net_sendto(&vpx_sock2, (tc8 *) &initPacket, PACKET_SIZE , &bytes_sent, address2);
+                rc = vpx_net_sendto(&vpx_sock2, (tc8 *) &initPacket, PACKET_SIZE, &bytes_sent, address2);
                 break;
             }
         }
 
-        Sleep(200);
     }
-
+#ifdef SHOW_WINDOW
     setup_surface();
+#endif
 
     /* Message loop for display window's thread */
     while (!_kbhit() && signalquit)
@@ -1272,7 +1294,8 @@ int main(int argc, char *argv[])
 
             while (get_frame(&y, compressed_video_buffer, sizeof(compressed_video_buffer), &size, &timestamp))
             {
-                lag_In_milli_seconds = (unsigned int)((timestamp - first_time_stamp_ever) / 1000.0 - (get_time() - time_of_first_display));
+                lag_In_milli_seconds = (unsigned int)((timestamp - first_time_stamp_ever)
+                    / 1000.0 - (get_time() - time_of_first_display));
                 vpxlog_dbg(FRAME, "Received frame %d, Lag: %d \n", timestamp, lag_In_milli_seconds);
 
 #ifdef DEBUG_FILES
@@ -1299,7 +1322,9 @@ int main(int argc, char *argv[])
                 }
 
                 img = vpx_codec_get_frame(&decoder, &iter);
+#ifdef SHOW_WINDOW
                 show_frame(img);
+#endif
 #ifdef DEBUG_FILES
                 debug_frame(img);
 #endif
