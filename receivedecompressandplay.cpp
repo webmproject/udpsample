@@ -25,6 +25,7 @@
 extern "C"
 {
 #include "rtp.h"
+#define VPX_CODEC_DISABLE_COMPAT 1
 #include "vpx/vpx_decoder.h"
 #include "vpx/vp8dx.h"
 }
@@ -348,20 +349,20 @@ int show_frame(vpx_image_t *img)
     SDL_LockYUVOverlay(overlay);
     int i;
 
-    unsigned char *in = img->planes[PLANE_Y];
+    unsigned char *in = img->planes[VPX_PLANE_Y];
     unsigned char *p = (unsigned char *) overlay->pixels[0];
 
-    for (i = 0; i < display_height; i++, in += img->stride[PLANE_Y], p += display_width)
+    for (i = 0; i < display_height; i++, in += img->stride[VPX_PLANE_Y], p += display_width)
         memcpy(p, in, display_width);
 
-    in = img->planes[PLANE_U];
+    in = img->planes[VPX_PLANE_U];
 
-    for (i = 0; i < display_height / 2; i++, in += img->stride[PLANE_U], p += display_width / 2)
+    for (i = 0; i < display_height / 2; i++, in += img->stride[VPX_PLANE_U], p += display_width / 2)
         memcpy(p, in, display_width / 2);
 
-    in = img->planes[PLANE_V];
+    in = img->planes[VPX_PLANE_V];
 
-    for (i = 0; i < display_height / 2; i++, in += img->stride[PLANE_U], p += display_width / 2)
+    for (i = 0; i < display_height / 2; i++, in += img->stride[VPX_PLANE_U], p += display_width / 2)
         memcpy(p, in, display_width / 2);
 
     SDL_UnlockYUVOverlay(overlay);
@@ -1173,7 +1174,7 @@ int main(int argc, char *argv[])
 
     int responded = 0;
 
-    vpx_dec_ctx_t          decoder;
+    vpx_codec_ctx_t        decoder;
     uint8_t               *buf = NULL;
     vp8_postproc_cfg_t	  ppcfg;
     vpx_codec_dec_cfg_t     cfg = {0};
@@ -1287,7 +1288,7 @@ int main(int argc, char *argv[])
                     time_of_first_display = get_time();
                 }
 
-                vpx_dec_iter_t  iter = NULL;
+                vpx_codec_iter_t  iter = NULL;
                 vpx_image_t    *img;
 
                 if (vpx_codec_decode(&decoder, compressed_video_buffer, sizeof(compressed_video_buffer), 0, 0))
