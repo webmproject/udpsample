@@ -28,6 +28,7 @@
 extern "C"
 {
 #include "rtp.h"
+#define VPX_CODEC_DISABLE_COMPAT 1
 #include "vpx/vpx_encoder.h"
 #include "vpx/vp8cx.h"
 }
@@ -988,7 +989,7 @@ int main(int argc, char *argv[])
 #endif
 
     vpx_codec_ctx_t        encoder;
-    vpx_img_alloc(&raw, IMG_FMT_YV12, display_width, display_height, 1);
+    vpx_img_alloc(&raw, VPX_IMG_FMT_YV12, display_width, display_height, 1);
 
     cfg.rc_target_bitrate = video_bitrate;
 
