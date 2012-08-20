@@ -2,6 +2,23 @@
   "comments": [
     {
       "key": {
+        "uuid": "AAAAFn//u8w\u003d",
+        "filename": "/COMMIT_MSG",
+        "patchSetId": 1
+      },
+      "lineNbr": 9,
+      "author": {
+        "id": 1000963
+      },
+      "writtenOn": "2012-08-20T20:11:09Z",
+      "side": 1,
+      "message": "Also fixed MTU packet size lowering to 1370 to account for encrypted bytes on vpns.",
+      "revId": "0751f4df9d61597a9d8d47056a2f80db24e81dcf",
+      "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba",
+      "unresolved": false
+    },
+    {
+      "key": {
         "uuid": "AAAAGX//6zg\u003d",
         "filename": "grabcompressandsend.cpp",
         "patchSetId": 1
