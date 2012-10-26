@@ -43,6 +43,16 @@ Code-Review+2: John Koleszar <jkoleszar@google.com>
 Code-Review+2: Jim Bankoski <jimbankoski@google.com>
 Verified+1: Jim Bankoski <jimbankoski@google.com>
 Submitted-by: Jim Bankoski <jimbankoski@google.com>
+Submitted-at: Tue, 18 Oct 2011 12:28:43 -0700
+Reviewed-on: https://gerrit.chromium.org/gerrit/10236
+Project: webm/udpsample
+Branch: refs/heads/master
+
+Change-Id: Ic7f51638c1eb930906f4c6d220c7ee4936189b94
+Code-Review+2: John Koleszar <jkoleszar@google.com>
+Code-Review+2: Jim Bankoski <jimbankoski@google.com>
+Verified+1: Jim Bankoski <jimbankoski@google.com>
+Submitted-by: Jim Bankoski <jimbankoski@google.com>
 Submitted-at: Tue, 18 Oct 2011 11:28:43 -0800
 Reviewed-on: https://gerrit.chromium.org/gerrit/10236
 Project: webm/udpsample
