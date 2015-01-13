@@ -1178,8 +1178,7 @@ int main(int argc, char *argv[])
     uint8_t               *buf = NULL;
     vp8_postproc_cfg_t	  ppcfg;
     vpx_codec_dec_cfg_t     cfg = {0};
-    int                     dec_flags =
-        VPX_CODEC_USE_ERROR_CONCEALMENT|VPX_CODEC_USE_POSTPROC;
+    int                     dec_flags = VPX_CODEC_USE_POSTPROC;
 
     vpx_codec_dec_init(&decoder, &vpx_codec_vp8_dx_algo, &cfg, dec_flags);
 
