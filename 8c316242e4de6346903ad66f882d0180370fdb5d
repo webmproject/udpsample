@@ -1,0 +1,8 @@
+Commit-Queue+1: Jim Bankoski <jimbankoski@google.com>
+Code-Review+2: Jim Bankoski <jimbankoski@google.com>
+Verified+1: Jim Bankoski <jimbankoski@google.com>
+Submitted-by: Jim Bankoski <jimbankoski@google.com>
+Submitted-at: Tue, 13 Jan 2015 16:20:52 -0800
+Reviewed-on: https://gerrit.chromium.org/gerrit/10487
+Project: webm/udpsample
+Branch: refs/heads/master
