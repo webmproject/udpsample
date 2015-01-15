@@ -78,6 +78,7 @@ bool buffer_has_frame = false;
 double buffer_time;
 long long last_time_in_nanoseconds = 0;
 
+CODEC video_codec = VPX_VP9;
 int display_width = 640;
 int display_height = 480;
 int capture_frame_rate = 30;
@@ -833,7 +834,28 @@ int main(int argc, char *argv[])
 
     vpx_codec_enc_cfg_t    cfg;
 
-    vpx_codec_enc_config_default(&vpx_codec_vp8_cx_algo, &cfg, 0);
+    // Go through the args once to look for codec
+    for (int arg = 0; arg < argc; arg++) {
+        if (argv[arg][0] == '-') {
+          switch (argv[arg][1]) {
+            case '8':
+              video_codec = VPX_VP8;
+              break;
+            case '9':
+              video_codec = VPX_VP9;
+              break;
+          }
+        }
+    }
+
+    if (video_codec == VPX_VP8) {
+      printf("VP8 \n");
+      vpx_codec_enc_config_default(&vpx_codec_vp8_cx_algo, &cfg, 0);
+    } else {
+      printf("VP9 \n");
+      vpx_codec_enc_config_default(&vpx_codec_vp9_cx_algo, &cfg, 0);
+    }
+
     cfg.rc_target_bitrate = video_bitrate;
     cfg.g_w = display_width;
     cfg.g_h = display_height;
@@ -852,51 +874,55 @@ int main(int argc, char *argv[])
     cfg.kf_mode = VPX_KF_DISABLED;
     cfg.kf_max_dist = 999999;
     cfg.g_threads = 2;
+    cfg.rc_resize_allowed = 0;
 
-    int cpu_used = -6;
+    int cpu_used = 8;
     int static_threshold = 1200;
 
-    while (--argc > 0)
+    for (int arg = 0; arg < argc; arg++)
     {
-        if (argv[argc][0] == '-')
+        if (argv[arg][0] == '-')
         {
-            switch (argv[argc][1])
+            switch (argv[arg][1])
             {
             case 'm':
             case 'M':
-                cfg.rc_dropframe_thresh = atoi(argv[argc--+1]);
+                cfg.rc_dropframe_thresh = atoi(argv[++arg]);
                 break;
             case 'c':
             case 'C':
-                cpu_used = atoi(argv[argc--+1]);
+                cpu_used = atoi(argv[++arg]);
                 break;
             case 't':
             case 'T':
-                static_threshold = atoi(argv[argc--+1]);
+                static_threshold = atoi(argv[++arg]);
                 break;
             case 'b':
             case 'B':
-                cfg.rc_min_quantizer = atoi(argv[argc--+1]);
+                cfg.rc_min_quantizer = atoi(argv[++arg]);
                 break;
             case 'q':
             case 'Q':
-                cfg.rc_max_quantizer = atoi(argv[argc--+1]);
+                cfg.rc_max_quantizer = atoi(argv[++arg]);
                 break;
             case 'd':
             case 'D':
-                drop_first = atoi(argv[argc--+1]);
+                drop_first = atoi(argv[++arg]);
                 break;
             case 'i':
             case 'I':
-                strncpy(ip, argv[argc--+1], 512);
+                strncpy(ip, argv[++arg], 512);
                 break;
             case 's':
             case 'S':
-                send_port = atoi(argv[argc--+1]);
+                send_port = atoi(argv[++arg]);
                 break;
             case 'r':
             case 'R':
-                recv_port = atoi(argv[argc--+1]);
+                recv_port = atoi(argv[++arg]);
+                break;
+            case '8':
+            case '9':
                 break;
             default:
                 printf(
@@ -1028,11 +1054,22 @@ int main(int argc, char *argv[])
     cfg.g_w = display_width;
     cfg.g_h = display_height;
 
-    vpx_codec_enc_init(&encoder, &vpx_codec_vp8_cx_algo, &cfg, 0);
-    vpx_codec_control_(&encoder, VP8E_SET_CPUUSED, cpu_used);
-    vpx_codec_control_(&encoder, VP8E_SET_STATIC_THRESHOLD, static_threshold);
-    vpx_codec_control_(&encoder, VP8E_SET_ENABLEAUTOALTREF, 0);
-    vpx_codec_control_(&encoder, VP8E_SET_NOISE_SENSITIVITY, 2);
+    if (video_codec == VPX_VP8) {
+      vpx_codec_enc_init(&encoder, &vpx_codec_vp8_cx_algo, &cfg, 0);
+      vpx_codec_control_(&encoder, VP8E_SET_CPUUSED, cpu_used);
+      vpx_codec_control_(&encoder, VP8E_SET_STATIC_THRESHOLD, static_threshold);
+      vpx_codec_control_(&encoder, VP8E_SET_ENABLEAUTOALTREF, 0);
+      vpx_codec_control_(&encoder, VP8E_SET_NOISE_SENSITIVITY, 2);
+    } else {
+      vpx_codec_enc_init(&encoder, &vpx_codec_vp9_cx_algo, &cfg, 0);
+      vpx_codec_control_(&encoder, VP8E_SET_CPUUSED, cpu_used);
+      vpx_codec_control_(&encoder, VP8E_SET_STATIC_THRESHOLD, static_threshold);
+      vpx_codec_control_(&encoder, VP8E_SET_ENABLEAUTOALTREF, 0);
+      vpx_codec_control_(&encoder, VP9E_SET_AQ_MODE, 3);
+      vpx_codec_control_(&encoder, VP9E_SET_TILE_COLUMNS, 2);
+      vpx_codec_control_(&encoder, VP9E_SET_FRAME_PARALLEL_DECODING, 1);
+      vpx_codec_control_(&encoder, VP8E_SET_ENABLEAUTOALTREF, 0);
+    }
     create_packetizer(&x, XOR, fec_numerator, fec_denominator);
     //HRE(CoInitialize(NULL));
 
@@ -1160,6 +1197,7 @@ int main(int argc, char *argv[])
                 const vpx_codec_cx_pkt_t *pkt;
                 vpx_codec_iter_t iter = NULL;
                 flags = recovery_flags[request_recovery];
+
                 vpx_codec_encode(&encoder, &raw, time_in_nano_seconds, 30000000,
                                  flags, VPX_DL_REALTIME);
                 ctx_exit_on_error(&encoder, "Failed to encode frame");

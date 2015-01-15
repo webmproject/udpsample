@@ -68,7 +68,7 @@ unsigned short send_port = 1408;
 unsigned short recv_port = 1407;
 unsigned int quit = 0;
 int signalquit = 1;
-
+CODEC video_codec = VPX_VP9;
 unsigned char compressed_video_buffer[400000];
 unsigned char output_video_buffer[1280*1024*3];
 tc8 one_packet[8000];
@@ -1061,27 +1061,27 @@ int age_skip_store(DEPACKETIZER *p, struct vpxsocket *vpx_sock, union vpx_sockad
     return 0;
 }
 #define SHOW_WINDOW 1
-//#define DEBUG_FILES 1
+#define DEBUG_FILES 1
 #ifdef DEBUG_FILES
-void debug_frame(vpx_image_t *img)
+void debug_frame(FILE *outFile, vpx_image_t *img)
 {
-    unsigned char *in = img->planes[PLANE_Y];
+    unsigned char *in = img->planes[VPX_PLANE_Y];
 
-    for (unsigned int i = 0; i < display_height; i++, in += img->stride[PLANE_Y])
+    for (unsigned int i = 0; i < display_height; i++, in += img->stride[VPX_PLANE_Y])
     {
         fwrite(in , display_width, 1, outFile);
     }
 
-    in = img->planes[PLANE_U];
+    in = img->planes[VPX_PLANE_U];
 
-    for (unsigned int i = 0; i < display_height / 2; i++, in += img->stride[PLANE_U])
+    for (unsigned int i = 0; i < display_height / 2; i++, in += img->stride[VPX_PLANE_U])
     {
         fwrite(in , display_width / 2, 1, outFile);
     }
 
-    in = img->planes[PLANE_V];
+    in = img->planes[VPX_PLANE_V];
 
-    for (unsigned int i = 0; i < display_height / 2; i++, in += img->stride[PLANE_V])
+    for (unsigned int i = 0; i < display_height / 2; i++, in += img->stride[VPX_PLANE_V])
     {
         fwrite(in , display_width / 2, 1, outFile);
     }
@@ -1093,59 +1093,65 @@ int main(int argc, char *argv[])
 {
     printf("ReceiveDecompressAndPlay (-? for help) \n");
 
-    while (--argc > 0)
+    for (int arg = 0; arg < argc; arg++)
     {
-        if (argv[argc][0] == '-')
+        if (argv[arg][0] == '-')
         {
-            switch (argv[argc][1])
+            switch (argv[arg][1])
             {
+            case '8':
+                video_codec = VPX_VP8;
+                break;
+            case '9':
+                video_codec = VPX_VP9;
+                break;
             case 'w':
             case 'W':
-                display_width = atoi(argv[argc--+1]);
+                display_width = atoi(argv[++arg]);
                 break;
             case 'h':
             case 'H':
-                display_height = atoi(argv[argc--+1]);
+                display_height = atoi(argv[++arg]);
                 break;
             case 'f':
             case 'F':
-                capture_frame_rate = atoi(argv[argc--+1]);
+                capture_frame_rate = atoi(argv[++arg]);
                 break;
             case 'b':
             case 'B':
-                video_bitrate = atoi(argv[argc--+1]);
+                video_bitrate = atoi(argv[++arg]);
                 break;
             case 'n':
             case 'N':
-                fec_numerator = atoi(argv[argc--+1]);
+                fec_numerator = atoi(argv[++arg]);
                 break;
             case 'd':
             case 'D':
-                fec_denominator = atoi(argv[argc--+1]);
+                fec_denominator = atoi(argv[++arg]);
                 break;
             case 't':
             case 'T':
-                skip_timeout = atoi(argv[argc--+1]);
+                skip_timeout = atoi(argv[++arg]);
                 break;
             case 'i':
             case 'I':
-                retry_interval = atoi(argv[argc--+1]);
+                retry_interval = atoi(argv[++arg]);
                 break;
             case 'c':
             case 'C':
-                retry_count = atoi(argv[argc--+1]);
+                retry_count = atoi(argv[++arg]);
                 break;
             case 'l':
             case 'L':
-                drop_simulation = atoi(argv[argc--+1]);
+                drop_simulation = atoi(argv[++arg]);
                 break;
             case 's':
             case 'S':
-                send_port = atoi(argv[argc--+1]);
+                send_port = atoi(argv[++arg]);
                 break;
             case 'r':
             case 'R':
-                recv_port = atoi(argv[argc--+1]);
+                recv_port = atoi(argv[++arg]);
                 break;
             default:
                 printf(
@@ -1200,7 +1206,14 @@ int main(int argc, char *argv[])
     vpx_codec_dec_cfg_t     cfg = {0};
     int                     dec_flags = VPX_CODEC_USE_POSTPROC;
 
-    vpx_codec_dec_init(&decoder, &vpx_codec_vp8_dx_algo, &cfg, dec_flags);
+
+    if (video_codec == VPX_VP8) {
+      printf("VP8 \n");
+      vpx_codec_dec_init(&decoder, &vpx_codec_vp8_dx_algo, &cfg, dec_flags);
+    } else {
+      printf("VP9 \n");
+      vpx_codec_dec_init(&decoder, &vpx_codec_vp9_dx_algo, &cfg, dec_flags);
+    }
 
     buf = (uint8_t *) malloc(display_width * display_height * 3 / 2);
 
@@ -1296,7 +1309,7 @@ int main(int argc, char *argv[])
             {
                 lag_In_milli_seconds = (unsigned int)((timestamp - first_time_stamp_ever)
                     / 1000.0 - (get_time() - time_of_first_display));
-                vpxlog_dbg(FRAME, "Received frame %d, Lag: %d \n", timestamp, lag_In_milli_seconds);
+                vpxlog_dbg(FRAME, "Received frame %d, Size:%d, Lag: %d \n", timestamp, size, lag_In_milli_seconds);
 
 #ifdef DEBUG_FILES
                 fwrite(&size, 4, 1, vpx_file);
@@ -1315,9 +1328,9 @@ int main(int argc, char *argv[])
                 vpx_codec_iter_t  iter = NULL;
                 vpx_image_t    *img;
 
-                if (vpx_codec_decode(&decoder, compressed_video_buffer, sizeof(compressed_video_buffer), 0, 0))
+                if (vpx_codec_decode(&decoder, compressed_video_buffer, size, 0, 0))
                 {
-                    vpxlog_dbg(FRAME, "Failed to decode frame: %s\n", vpx_codec_error(&decoder));
+                    vpxlog_dbg(ERRORS, "Failed to decode frame: %s\n", vpx_codec_error(&decoder));
                     return -1;
                 }
 
@@ -1326,7 +1339,7 @@ int main(int argc, char *argv[])
                 show_frame(img);
 #endif
 #ifdef DEBUG_FILES
-                debug_frame(img);
+                debug_frame(out_file, img);
 #endif
 
             };
@@ -1354,6 +1367,7 @@ int main(int argc, char *argv[])
             age_skip_store(&y, &vpx_sock2, &address2);
 
     }
+    vpxlog_dbg(ERRORS, "Exited successfully.\n");
 
     signalquit = 0;
 
