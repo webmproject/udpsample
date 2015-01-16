@@ -798,7 +798,7 @@ int send_packet(PACKETIZER *p, struct vpxsocket *vpxSock, union vpx_sockaddr_x a
     if (p->send_ptr == p->add_ptr)
         return -1;
 
-    vpxlog_dbg(LOG_PACKET, "Sent Packet %d, %d, %d : new=%d %d %x\n",
+    vpxlog_dbg(LOG_PACKET, "Sent Packet %d, %u, %d : new=%d %d %x\n",
                R2(p->packet[p->send_ptr].seq),
                R4(p->packet[p->send_ptr].timestamp),
                p->packet[p->send_ptr].frame_type,
@@ -876,7 +876,7 @@ int main(int argc, char *argv[])
     cfg.g_threads = 2;
     cfg.rc_resize_allowed = 0;
 
-    int cpu_used = 8;
+    int cpu_used = 6;
     int static_threshold = 1200;
 
     for (int arg = 0; arg < argc; arg++)
@@ -1113,7 +1113,7 @@ int main(int argc, char *argv[])
                 rc = vpx_net_sendto(&vpx_socket, (tc8 *) &x.packet[seq&PSM],
                                     PACKET_HEADER_SIZE + x.packet[seq&PSM].size,
                                     &bytes_sent, address);
-                vpxlog_dbg(SKIP, "Sent recovery packet %d,%c:%d %d, %d,%d,%d %x\n",\
+                vpxlog_dbg(SKIP, "Sent recovery packet %d,%c:%d %d, %d,%d,%u %x\n",\
                            rc, command, tp->frame_type, seq, R2(tp->seq), R4(tp->timestamp),
                            bytes_sent,address);
                 continue;
@@ -1138,7 +1138,7 @@ int main(int argc, char *argv[])
                 rc = vpx_net_sendto(&vpx_socket, (tc8 *) &x.packet[seq&PSM],
                                     PACKET_HEADER_SIZE + x.packet[seq&PSM].size,
                                     &bytes_sent, address);
-                vpxlog_dbg(SKIP, "Sent recovery packet %c:%d, %d,%d\n", command,
+                vpxlog_dbg(SKIP, "Sent recovery packet %c:%d, %d,%u\n", command,
                            tp->frame_type, seq, R4(tp->timestamp));
                 continue;
             }
@@ -1149,7 +1149,7 @@ int main(int argc, char *argv[])
                 && (unsigned short)(seq - recovery_seq) < 32768)
             {
                 request_recovery = recovery_type;
-                vpxlog_dbg(SKIP, "Requested recovery frame %c:%c,%d,%d\n", command,
+                vpxlog_dbg(SKIP, "Requested recovery frame %c:%c,%d,%u\n", command,
                            (recovery_type == GOLD ? 'G' : 'A'),
                            x.packet[gold_recovery_seq&PSM].frame_type, seq,
                            R4(x.packet[gold_recovery_seq&PSM].timestamp));
@@ -1162,7 +1162,7 @@ int main(int argc, char *argv[])
                 (unsigned short)(seq - other_recovery_seq) < 32768)
             {
                 request_recovery = other_recovery_type;
-                vpxlog_dbg(SKIP, "Requested recovery frame %c:%c,%d,%d\n", command,
+                vpxlog_dbg(SKIP, "Requested recovery frame %c:%c,%d,%u\n", command,
                            (other_recovery_type == GOLD ? 'G' : 'A'),
                            x.packet[gold_recovery_seq&PSM].frame_type, seq,
                            R4(x.packet[gold_recovery_seq&PSM].timestamp));
@@ -1171,7 +1171,7 @@ int main(int argc, char *argv[])
 
             // nothing else we can do ask for a key
             request_recovery = KEY;
-            vpxlog_dbg(SKIP, "Requested key frame %c:%d,%d\n", command,
+            vpxlog_dbg(SKIP, "Requested key frame %c:%d,%u\n", command,
                        tp->frame_type, seq, R4(tp->timestamp));
 
             continue;
@@ -1227,7 +1227,7 @@ int main(int argc, char *argv[])
                         packetize(&x, rtptime, (unsigned char *) pkt->data.frame.buf,
                                   pkt->data.frame.sz, frame_type);
 
-                        vpxlog_dbg(FRAME, "Frame %d %d %d %10.4g %d\n",
+                        vpxlog_dbg(FRAME, "Frame %d %d %u %10.4g %d\n",
                                    R2(x.packet[x.send_ptr].seq), pkt->data.frame.sz,
                                    R4(x.packet[x.send_ptr].timestamp), fps,
                                    gold_recovery_seq);

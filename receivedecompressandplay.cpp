@@ -548,7 +548,7 @@ void check_recovery(DEPACKETIZER *p,  PACKET *x)
         unsigned short seq = x->seq;//p->oldest_seq;
         unsigned short lastPossibleSeq = p->oldest_seq;//p->last_seq;
         PACKET *tp = &p->p[seq&PSM];
-        vpxlog_dbg(REBUILD, "Received keyframe or recovery frame -> %d, %d \n",
+        vpxlog_dbg(REBUILD, "Received keyframe or recovery frame -> %d, %u \n",
                    seq, p->p[x->seq&PSM].timestamp);
 
         // if we are on a new frame drop everything older than where we are now.
@@ -584,9 +584,9 @@ int read_packet(DEPACKETIZER *p, tc8 *data, unsigned int size)
     unsigned int skip_fill = 0;
     x->seq = R2(x->seq);
     x->timestamp = R4(x->timestamp);
-    vpxlog_dbg(LOG_PACKET, "Received Packet %d, %d : new: %d, frame type: "
-        "%d given_up: %d oldest: %d \n", x->seq, p->p[x->seq&PSM].timestamp,
-        x->new_frame, x->frame_type, given_up, p->oldest_seq);
+    //vpxlog_dbg(LOG_PACKET, "Received Packet %d, %u : new: %d, frame type: "
+    //    "%d given_up: %d oldest: %d \n", x->seq, p->p[x->seq&PSM].timestamp,
+    //    x->new_frame, x->frame_type, given_up, p->oldest_seq);
 
     // random drops
     if ((rand() & 1023) < drop_simulation)
@@ -607,7 +607,7 @@ int read_packet(DEPACKETIZER *p, tc8 *data, unsigned int size)
         first_seq_ever = x->seq;
         p->oldest_seq = x->seq;
         p->last_seq = p->oldest_seq - 1;
-        vpxlog_dbg(REBUILD, "Received First TimeStamp ever! -> %d, %d new=%d\n",
+        vpxlog_dbg(REBUILD, "Received First TimeStamp ever! -> %d, %u new=%d\n",
                    x->seq, x->timestamp, x->new_frame);
 
         if (x->new_frame != 1)
@@ -667,7 +667,7 @@ int read_packet(DEPACKETIZER *p, tc8 *data, unsigned int size)
 
     p->p[x->seq &PSM] = *x;
 
-    vpxlog_dbg(LOG_PACKET, "Received Packet %d, %d : new: %d, "
+    vpxlog_dbg(LOG_PACKET, "Received Packet %d, %u : new: %d, "
         "frame type: %d given_up: %d oldest: %d \n", x->seq,
         p->p[x->seq&PSM].timestamp, x->new_frame, x->frame_type, given_up,
         p->oldest_seq);
@@ -768,7 +768,7 @@ int rebuild_packet(DEPACKETIZER *p, unsigned short seq)
     }
 
     // go through a full packet's worth of data.
-    for (j = 0; j < PACKET_SIZE / sizeof(long long); j++)
+    for (j = 0; j < (sizeof(long long)-1 + PACKET_SIZE) / sizeof(long long); j++)
     {
         // start with the most recent packet
         *out = *(in[0]);
@@ -793,19 +793,6 @@ int rebuild_packet(DEPACKETIZER *p, unsigned short seq)
     p->p[seq &PSM].end_frame = 0;
     p->p[seq &PSM].frame_type = pp->frame_type;
 
-    // logging what packets we used to rebuild
-    if (LOG_MASK & REBUILD)
-    {
-        unsigned short last = seqj + redundant_count + 2;
-        seqj++;
-        vpxlog_dbg(REBUILD, "Rebuilt Lost Sequence :%d, %d from: ", seq, p->p[seq&PSM].timestamp);
-
-        for (; seqj != last; seqj++)
-            if (seq != seqj)
-                vpxlog_dbg_no_head(REBUILD, "%d, ", p->p[seqj&PSM].seq);
-
-        vpxlog_dbg_no_head(REBUILD, "\n");
-    }
 
     // if np is type and end_frame this packet ends frame
     if (np->end_frame && np->type)
@@ -830,6 +817,21 @@ int rebuild_packet(DEPACKETIZER *p, unsigned short seq)
         }
     }
 
+    // logging what packets we used to rebuild
+    if (LOG_MASK & REBUILD)
+    {
+        unsigned short last = seqj + redundant_count + 2;
+        seqj++;
+        vpxlog_dbg(REBUILD, "Rebuilt Lost Sequence :%d, %u from: ", seq, p->p[seq&PSM].timestamp);
+
+        for (; seqj != last; seqj++)
+            if (seq != seqj)
+                vpxlog_dbg_no_head(REBUILD, "%d, ", p->p[seqj&PSM].seq);
+
+        vpxlog_dbg_no_head(REBUILD, "\n");
+    }
+    remove_skip(p, seq);
+
     check_recovery(p, &p->p[seq&PSM]);
     return 0;
 }
@@ -845,8 +847,8 @@ int frame_ready(DEPACKETIZER *p)
 
     if (timestamp < p->last_frame_timestamp + 1)
     {
-        vpxlog_dbg(FRAME, "Trying to play an old frame:%d, timestamp :%d , "
-            "last Time :%d \n", seq, timestamp, p->last_frame_timestamp);
+        vpxlog_dbg(FRAME, "Trying to play an old frame:%d, timestamp :%u , "
+            "last Time :%u \n", seq, timestamp, p->last_frame_timestamp);
         return 0;
     }
 
@@ -1309,7 +1311,7 @@ int main(int argc, char *argv[])
             {
                 lag_In_milli_seconds = (unsigned int)((timestamp - first_time_stamp_ever)
                     / 1000.0 - (get_time() - time_of_first_display));
-                vpxlog_dbg(FRAME, "Received frame %d, Size:%d, Lag: %d \n", timestamp, size, lag_In_milli_seconds);
+                vpxlog_dbg(FRAME, "Received frame %u, Size:%d, Lag: %d \n", timestamp, size, lag_In_milli_seconds);
 
 #ifdef DEBUG_FILES
                 fwrite(&size, 4, 1, vpx_file);
@@ -1341,6 +1343,8 @@ int main(int argc, char *argv[])
 #ifdef DEBUG_FILES
                 debug_frame(out_file, img);
 #endif
+
+                vpxlog_dbg(FRAME, "Played frame timestamp :%u \n", timestamp);
 
             };
 
