@@ -372,7 +372,6 @@ void destroy_surface(void) {
 
 static int event_thread(void *data) {
   struct pt_data *gdata = (struct pt_data *) data;
-  SDL_Surface *pscreen = *gdata->ptscreen;
   SDL_Event *sdlevent = gdata->ptsdlevent;
   SDL_Rect *drect = gdata->drect;
   SDL_mutex *affmutex = gdata->affmutex;
@@ -1001,21 +1000,21 @@ int age_skip_store(DEPACKETIZER *p, struct vpxsocket *vpx_sock,
 void debug_frame(FILE *outFile, vpx_image_t *img) {
   unsigned char *in = img->planes[VPX_PLANE_Y];
 
-  for (unsigned int i = 0; i < display_height; i++, in +=
+  for (int i = 0; i < display_height; i++, in +=
       img->stride[VPX_PLANE_Y]) {
     fwrite(in, display_width, 1, outFile);
   }
 
   in = img->planes[VPX_PLANE_U];
 
-  for (unsigned int i = 0; i < display_height / 2; i++, in +=
+  for (int i = 0; i < display_height / 2; i++, in +=
       img->stride[VPX_PLANE_U]) {
     fwrite(in, display_width / 2, 1, outFile);
   }
 
   in = img->planes[VPX_PLANE_V];
 
-  for (unsigned int i = 0; i < display_height / 2; i++, in +=
+  for (int i = 0; i < display_height / 2; i++, in +=
       img->stride[VPX_PLANE_V]) {
     fwrite(in, display_width / 2, 1, outFile);
   }

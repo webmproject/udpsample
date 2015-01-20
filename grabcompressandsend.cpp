@@ -729,7 +729,6 @@ int packetize(PACKETIZER *p, unsigned int time, unsigned char *data,
 //#define ONEWAY
 int send_packet(PACKETIZER *p, struct vpxsocket *vpxSock,
                 union vpx_sockaddr_x address) {
-  TCRV rc;
   tc32 bytes_sent;
 
   if (p->send_ptr == p->add_ptr)
@@ -741,9 +740,8 @@ int send_packet(PACKETIZER *p, struct vpxsocket *vpxSock,
              p->packet[p->send_ptr].frame_type, p->packet[p->send_ptr].size,
              p->packet[p->send_ptr].new_frame, address);
 
-  rc = vpx_net_sendto(vpxSock, (tc8 *) &p->packet[p->send_ptr],
-  PACKET_HEADER_SIZE + p->packet[p->send_ptr].size,
-                      &bytes_sent, address);
+  vpx_net_sendto(vpxSock, (tc8 *) &p->packet[p->send_ptr],
+  PACKET_HEADER_SIZE + p->packet[p->send_ptr].size, &bytes_sent, address);
 
   p->send_ptr++;
   p->send_ptr &= PSM;
