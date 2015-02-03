@@ -490,8 +490,8 @@ int start_capture(void) {
   setfps.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
   setfps.parm.capture.timeperframe.numerator = 1;
   setfps.parm.capture.timeperframe.denominator = capture_frame_rate;
-
   FAIL_ON_NONZERO(ioctl(fd, VIDIOC_S_PARM, &setfps))
+
 
   memset(&rb, 0, sizeof(struct v4l2_requestbuffers));
   rb.count = NB_BUFFER;
@@ -797,9 +797,9 @@ int main(int argc, char *argv[]) {
   cfg.rc_min_quantizer = 20;
   cfg.rc_max_quantizer = 50;
   cfg.rc_dropframe_thresh = 1;
-  cfg.rc_buf_optimal_sz = 1000;
-  cfg.rc_buf_initial_sz = 1000;
-  cfg.rc_buf_sz = 1000;
+  cfg.rc_buf_optimal_sz = 200;
+  cfg.rc_buf_initial_sz = 200;
+  cfg.rc_buf_sz = 200;
   cfg.g_error_resilient = 1;
   cfg.kf_mode = VPX_KF_DISABLED;
   cfg.kf_max_dist = 999999;
@@ -992,6 +992,7 @@ int main(int argc, char *argv[]) {
     vpx_codec_control_(&encoder, VP9E_SET_TILE_COLUMNS, 2);
     vpx_codec_control_(&encoder, VP9E_SET_FRAME_PARALLEL_DECODING, 1);
     vpx_codec_control_(&encoder, VP8E_SET_ENABLEAUTOALTREF, 0);
+    vpx_codec_control_(&encoder, VP8E_SET_GF_CBR_BOOST_PCT, 200);
   }
   create_packetizer(&x, XOR, fec_numerator, fec_denominator);
   //HRE(CoInitialize(NULL));

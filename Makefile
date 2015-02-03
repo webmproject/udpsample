@@ -24,7 +24,7 @@ C_DEPS := \
 UNAME := $(shell uname)
 
 ifeq ($(UNAME), Linux)
-    C_FLAGS = -DLINUX  -O0 -g3 -Wall -c -fmessage-length=0 -m64 -MMD -MP -MF"$(@:%.o=%.d)" -MT"$(@:%.o=%.d)"
+    C_FLAGS = -DLINUX  -O3 -g3 -Wall -c -fmessage-length=0 -m64 -MMD -MP -MF"$(@:%.o=%.d)" -MT"$(@:%.o=%.d)"
     RLIBS := -lvpx -lpthread -lrt -lSDL 
     SLIBS := -lvpx -lpthread -lrt 
     L_FLAGS := -m64  

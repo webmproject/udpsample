@@ -548,19 +548,14 @@ void check_recovery(DEPACKETIZER *p, PACKET *x) {
     given_up = 0;
   }
 }
+double bits = 0;
+unsigned short last = 0;
 
 int read_packet(DEPACKETIZER *p, tc8 *data, unsigned int size) {
   PACKET *x = (PACKET *) data;
   unsigned int skip_fill = 0;
   x->seq = R2(x->seq);
   x->timestamp = R4(x->timestamp);
-  //vpxlog_dbg(LOG_PACKET, "Received Packet %d, %u : new: %d, frame type: "
-  //    "%d given_up: %d oldest: %d \n", x->seq, p->p[x->seq&PSM].timestamp,
-  //    x->new_frame, x->frame_type, given_up, p->oldest_seq);
-
-  // random drops
-  if ((rand() & 1023) < drop_simulation)
-    return 0;
 
   // wrong ssrc exit
   if (p->ssrc != x->ssrc)
@@ -995,30 +990,26 @@ int age_skip_store(DEPACKETIZER *p, struct vpxsocket *vpx_sock,
   return 0;
 }
 #define SHOW_WINDOW 1
-#define DEBUG_FILES 1
+//#define DEBUG_FILES 1
 #ifdef DEBUG_FILES
 void debug_frame(FILE *outFile, vpx_image_t *img) {
   unsigned char *in = img->planes[VPX_PLANE_Y];
 
-  for (int i = 0; i < display_height; i++, in +=
-      img->stride[VPX_PLANE_Y]) {
+  for (int i = 0; i < display_height; i++, in += img->stride[VPX_PLANE_Y]) {
     fwrite(in, display_width, 1, outFile);
   }
 
   in = img->planes[VPX_PLANE_U];
 
-  for (int i = 0; i < display_height / 2; i++, in +=
-      img->stride[VPX_PLANE_U]) {
+  for (int i = 0; i < display_height / 2; i++, in += img->stride[VPX_PLANE_U]) {
     fwrite(in, display_width / 2, 1, outFile);
   }
 
   in = img->planes[VPX_PLANE_V];
 
-  for (int i = 0; i < display_height / 2; i++, in +=
-      img->stride[VPX_PLANE_V]) {
+  for (int i = 0; i < display_height / 2; i++, in += img->stride[VPX_PLANE_V]) {
     fwrite(in, display_width / 2, 1, outFile);
   }
-
 }
 #endif
 
@@ -1148,10 +1139,10 @@ int main(int argc, char *argv[]) {
   buf = (uint8_t *) malloc(display_width * display_height * 3 / 2);
 
   /* Config post processing settings for decoder */
-  ppcfg.post_proc_flag = VP8_DEMACROBLOCK | VP8_DEBLOCK;
-  ppcfg.deblocking_level = 4;
-  ppcfg.noise_level = 1;
-  vpx_codec_control(&decoder, VP8_SET_POSTPROC, &ppcfg);
+  //ppcfg.post_proc_flag = VP8_DEMACROBLOCK | VP8_DEBLOCK;
+  //ppcfg.deblocking_level = 4;
+  //ppcfg.noise_level = 44;
+  //vpx_codec_control(&decoder, VP8_SET_POSTPROC, &ppcfg);
 
   create_depacketizer(&y);
 
@@ -1213,6 +1204,7 @@ int main(int argc, char *argv[]) {
   setup_surface();
 #endif
 
+  unsigned int frames_shown = 0;
   /* Message loop for display window's thread */
   while (!_kbhit() && signalquit) {
     rc = vpx_net_recvfrom(&vpx_sock, one_packet, sizeof(one_packet),
@@ -1229,7 +1221,12 @@ int main(int argc, char *argv[]) {
     if (bytes_read) {
       unsigned int timestamp;
       unsigned int size;
-      read_packet(&y, one_packet, bytes_read);
+
+      // random drops
+      if ((rand() & 1023) > drop_simulation) {
+        read_packet(&y, one_packet, bytes_read);
+        bits += bytes_read * 8;
+      }
 
       while (get_frame(&y, compressed_video_buffer,
                        sizeof(compressed_video_buffer), &size, &timestamp)) {
@@ -1264,6 +1261,8 @@ int main(int argc, char *argv[]) {
         img = vpx_codec_get_frame(&decoder, &iter);
 #ifdef SHOW_WINDOW
         show_frame(img);
+        frames_shown++;
+
 #endif
 #ifdef DEBUG_FILES
         debug_frame(out_file, img);
@@ -1291,6 +1290,20 @@ int main(int argc, char *argv[]) {
 
     } else
       age_skip_store(&y, &vpx_sock2, &address2);
+
+    // Collect some stats
+    unsigned short elapsed = (unsigned short) ((get_time() & 0xffff) - last);
+    if (bits != 0 && elapsed > 1000) {
+      double bitrate = 1.0 * bits / elapsed;
+      double framerate = 1000.0 * frames_shown / elapsed;
+      bits = 0;
+      frames_shown = 0;
+      printf("bitrate: %14.4f fps: %14.4f\n", bitrate, framerate);
+      last = (unsigned short) (get_time() & 0xffff);
+    }
+    if (bits == 0)
+      last = (unsigned short) (get_time() & 0xffff);
+
 
   }
   vpxlog_dbg(ERRORS, "Exited successfully.\n");
