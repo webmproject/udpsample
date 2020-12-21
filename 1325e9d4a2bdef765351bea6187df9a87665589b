@@ -16,6 +16,23 @@
       "message": "Just to get it compiling with newer sdl.  :) ",
       "revId": "1325e9d4a2bdef765351bea6187df9a87665589b",
       "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "62427707_9757a2b9",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000893
+      },
+      "writtenOn": "2020-12-21T19:28:10Z",
+      "side": 1,
+      "message": "Thanks for updating the code!",
+      "revId": "1325e9d4a2bdef765351bea6187df9a87665589b",
+      "serverId": "3ce6091f-6c88-37e8-8c75-72f92ae8dfba"
     }
   ]
 }
