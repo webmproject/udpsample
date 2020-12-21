@@ -254,10 +254,10 @@ void destroy_surface(void) {
 #else
 #define Sleep(X) usleep(1000*X)
 extern "C" int _kbhit(void);
-#include <SDL/SDL.h>
-#include <SDL/SDL_thread.h>
-#include <SDL/SDL_audio.h>
-#include <SDL/SDL_timer.h>
+#include <SDL2/SDL.h>
+#include <SDL2/SDL_thread.h>
+#include <SDL2/SDL_audio.h>
+#include <SDL2/SDL_timer.h>
 
 #include <strings.h>
 #include <iostream>
@@ -265,25 +265,24 @@ extern "C" int _kbhit(void);
 using namespace std;
 
 struct pt_data {
-  SDL_Surface **ptscreen;
+  SDL_Window **ptscreen;
   SDL_Event *ptsdlevent;
   SDL_Rect *drect;
   SDL_mutex *affmutex;
 } ptdata;
 
-static Uint32 SDL_VIDEO_Flags = SDL_ANYFORMAT | SDL_DOUBLEBUF | SDL_RESIZABLE;
-
 static int event_thread(void *data);
 
-const SDL_VideoInfo *info;
+SDL_RendererInfo info;
 char driver[128];
 const char *videodevice = NULL;
-SDL_Surface *pscreen;
-SDL_Overlay *overlay;
+SDL_Texture *overlay;
 SDL_Rect drect;
 SDL_Event sdlevent;
 SDL_Thread *mythread;
 SDL_mutex *affmutex;
+SDL_Renderer *renderer;
+SDL_Window * pscreen;
 int status;
 unsigned char *p = NULL;
 unsigned char d1[500], d2[500];
@@ -296,29 +295,20 @@ int setup_surface(void) {
     exit(1);
   }
 
-  if (SDL_VideoDriverName(driver, sizeof(driver))) {
-    printf("Video driver: %s\n", driver);
-  }
+  pscreen = SDL_CreateWindow("Receive Decompress and Play",
+                          SDL_WINDOWPOS_UNDEFINED,
+                          SDL_WINDOWPOS_UNDEFINED,
+                          display_width, display_height,
+                          SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE);
 
-  info = SDL_GetVideoInfo();
+  renderer = SDL_CreateRenderer(pscreen, -1, 0);
 
-  if (videodevice == NULL || *videodevice == 0) {
-    videodevice = "/dev/video0";
-  }
+  overlay = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_YV12, SDL_TEXTUREACCESS_STREAMING, display_width, display_height);
 
-  pscreen = SDL_SetVideoMode(display_width, display_height, 0, SDL_VIDEO_Flags);
-  overlay = SDL_CreateYUVOverlay(display_width, display_height,
-                                 SDL_YV12_OVERLAY, pscreen);
-
-  p = (unsigned char *) overlay->pixels[0];
   drect.x = 0;
   drect.y = 0;
-  drect.w = pscreen->w;
-  drect.h = pscreen->h;
-
-  SDL_WM_SetCaption("Receive Decompress and Play", NULL);
-  SDL_LockYUVOverlay(overlay);
-  SDL_UnlockYUVOverlay(overlay);
+  drect.w = display_width;
+  drect.h = display_height;
 
   /* initialize thread data */
   ptdata.ptscreen = &pscreen;
@@ -326,40 +316,24 @@ int setup_surface(void) {
   ptdata.drect = &drect;
   affmutex = SDL_CreateMutex();
   ptdata.affmutex = affmutex;
-  mythread = SDL_CreateThread(event_thread, (void *) &ptdata);
+  mythread = SDL_CreateThread(event_thread, NULL, (void *) &ptdata);
 
   return 0;
 }
 ;
 int show_frame(vpx_image_t *img) {
-  char caption[512];
-  sprintf(caption, "Receive Decompress and Play");
   SDL_LockMutex(affmutex);
-  SDL_WM_SetCaption(caption, NULL);
-  SDL_LockYUVOverlay(overlay);
-  int i;
-
-  unsigned char *in = img->planes[VPX_PLANE_Y];
-  unsigned char *p = (unsigned char *) overlay->pixels[0];
-
-  for (i = 0; i < display_height; i++, in += img->stride[VPX_PLANE_Y], p +=
-      display_width)
-    memcpy(p, in, display_width);
-
-  in = img->planes[VPX_PLANE_U];
-
-  for (i = 0; i < display_height / 2;
-      i++, in += img->stride[VPX_PLANE_U], p += display_width / 2)
-    memcpy(p, in, display_width / 2);
-
-  in = img->planes[VPX_PLANE_V];
-
-  for (i = 0; i < display_height / 2;
-      i++, in += img->stride[VPX_PLANE_U], p += display_width / 2)
-    memcpy(p, in, display_width / 2);
-
-  SDL_UnlockYUVOverlay(overlay);
-  SDL_DisplayYUVOverlay(overlay, &drect);
+  SDL_UpdateYUVTexture(overlay,
+                        NULL,
+                        img->planes[VPX_PLANE_Y],
+                        img->stride[VPX_PLANE_Y],
+                        img->planes[VPX_PLANE_V],
+                        img->stride[VPX_PLANE_V],
+                        img->planes[VPX_PLANE_U],
+                        img->stride[VPX_PLANE_U]
+                    );
+  SDL_RenderCopy(renderer, overlay, NULL, NULL);
+  SDL_RenderPresent(renderer);
   SDL_UnlockMutex(affmutex);
   return 0;
 }
@@ -367,13 +341,15 @@ int show_frame(vpx_image_t *img) {
 void destroy_surface(void) {
   SDL_WaitThread(mythread, &status);
   SDL_DestroyMutex(affmutex);
+  SDL_DestroyTexture(overlay);
+  SDL_DestroyRenderer(renderer);
+  SDL_DestroyWindow(pscreen);
   SDL_Quit();
 }
 
 static int event_thread(void *data) {
   struct pt_data *gdata = (struct pt_data *) data;
   SDL_Event *sdlevent = gdata->ptsdlevent;
-  SDL_Rect *drect = gdata->drect;
   SDL_mutex *affmutex = gdata->affmutex;
 
   while (signalquit) {
@@ -382,12 +358,10 @@ static int event_thread(void *data) {
     while (SDL_PollEvent(sdlevent))     //scan the event queue
     {
       switch (sdlevent->type) {
-        case SDL_VIDEORESIZE:
-          pscreen = SDL_SetVideoMode(sdlevent->resize.w & 0xfffe,
-                                     sdlevent->resize.h & 0xfffe, 0,
-                                     SDL_VIDEO_Flags);
-          drect->w = sdlevent->resize.w & 0xfffe;
-          drect->h = sdlevent->resize.h & 0xfffe;
+        case SDL_WINDOWEVENT_RESIZED:
+          SDL_SetWindowSize(pscreen,
+                            sdlevent->window.data1,
+                            sdlevent->window.data2);
           break;
         case SDL_KEYUP:
           break;
@@ -1124,9 +1098,9 @@ int main(int argc, char *argv[]) {
 
   vpx_codec_ctx_t decoder;
   uint8_t *buf = NULL;
-  vp8_postproc_cfg_t ppcfg;
   vpx_codec_dec_cfg_t cfg = {0};
   int dec_flags = VPX_CODEC_USE_POSTPROC;
+
 
   if (video_codec == VPX_VP8) {
     printf("VP8 \n");

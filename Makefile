@@ -25,19 +25,19 @@ UNAME := $(shell uname)
 
 ifeq ($(UNAME), Linux)
     C_FLAGS = -DLINUX  -O3 -g3 -Wall -c -fmessage-length=0 -m64 -MMD -MP -MF"$(@:%.o=%.d)" -MT"$(@:%.o=%.d)"
-    RLIBS := -lvpx -lpthread -lrt -lSDL 
+    RLIBS := -lvpx -lpthread -lrt -lSDL2
     SLIBS := -lvpx -lpthread -lrt 
     L_FLAGS := -m64  
 else
 ifeq ($(UNAME), Darwin)
     C_FLAGS = -DLINUX -DMACOSX  -O0 -g3 -Wall -c -fmessage-length=0 -MMD -MP -MF"$(@:%.o=%.d)" -MT"$(@:%.o=%.d)"
-    RLIBS := -lvpx -lpthread -lSDL -lpthread -lSDLmain -framework cocoa
+    RLIBS := -lvpx -lpthread -lSDL2 -lpthread -lSDLmain -framework cocoa
     SLIBS := -framework Carbon -framework QuartzCore -framework QuickTime -lvpx -lpthread -framework cocoa -lvidcap
     L_FLAGS := -D_THREAD_SAFE
 else
 ifneq ($(findstring CYGWIN, $(UNAME)),)
     C_FLAGS = -DLINUX -DMACOSX -O0 -g3 -Wall -c -fmessage-length=0 -MMD -MP -MF"$(@:%.o=%.d)" -MT"$(@:%.o=%.d)"
-    RLIBS := -lvpx -lpthread -lrt -lSDL 
+    RLIBS := -lvpx -lpthread -lrt -lSDL2
     SLIBS := -lvpx -lpthread -lrt -lvidcap
     L_FLAGS := 
 else
